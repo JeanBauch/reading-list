@@ -4,7 +4,7 @@ import { createReadingList, openDatabaseFile } from "./reading-list";
 /** Where the database lives: READING_LIST_DB_PATH, or data/reading-list.db at the project root. */
 function databasePath(): string {
   return (
-    process.env.READING_LIST_DB_PATH ??
+    process.env.READING_LIST_DB_PATH ||
     join(process.cwd(), "data", "reading-list.db")
   );
 }

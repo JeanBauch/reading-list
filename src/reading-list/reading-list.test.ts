@@ -512,7 +512,10 @@ describe("editar", () => {
       readingList.edit(book.id, { title: "", authorship: "Machado de Assis" }),
     ).toEqual({
       ok: false,
-      error: { kind: "validation", fieldErrors: { title: "Informe o título." } },
+      error: {
+        kind: "validation",
+        fieldErrors: { title: "Informe o título." },
+      },
     });
     expect(
       readingList.edit(book.id, {
@@ -719,6 +722,39 @@ describe("obter seções", () => {
       error: { message: "Não foi possível carregar a lista de leitura." },
     });
     expect(readFileSync(path).equals(before)).toBe(true);
+  });
+
+  test("after a storage failure the next use opens the database again", () => {
+    const closed = new DatabaseSync(":memory:");
+    closed.close();
+    const connections = [closed, new DatabaseSync(":memory:")];
+    const readingList = createReadingList(
+      () => connections.shift()!,
+      () => 0,
+    );
+
+    expect(readingList.getSections()).toMatchObject({ ok: false });
+    expect(readingList.getSections()).toMatchObject({ ok: true });
+  });
+
+  test("a failed schema creation leaves no transaction behind, so a later attempt can succeed", () => {
+    const path = join(tempDir(), "reading-list.db");
+    writeFileSync(path, "");
+    const readOnly = new DatabaseSync(path, { readOnly: true });
+    openFiles.push(readOnly);
+    const connections = [readOnly, () => openTracked(path)];
+    const readingList = createReadingList(
+      () => {
+        const next = connections.shift()!;
+        return typeof next === "function" ? next() : next;
+      },
+      () => 0,
+    );
+
+    expect(readingList.getSections()).toMatchObject({ ok: false });
+    expect(
+      readingList.register({ title: "A", authorship: "B", status: "read" }),
+    ).toMatchObject({ ok: true });
   });
 
   test("on first run the database file and its folder are created, with schema version 1", () => {

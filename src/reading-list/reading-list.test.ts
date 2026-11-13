@@ -9,15 +9,7 @@ import {
   openDatabaseFile,
   type ReadingList,
 } from "./reading-list";
-
-function inMemoryReadingList() {
-  const clock = { now: 1_000 };
-  const readingList = createReadingList(
-    () => new DatabaseSync(":memory:"),
-    () => clock.now,
-  );
-  return { readingList, clock };
-}
+import { inMemoryReadingList, titlesBySection } from "./test-support";
 
 const tempDirs: string[] = [];
 function tempDir() {
@@ -40,17 +32,6 @@ afterEach(() => {
     rmSync(dir, { recursive: true, force: true });
   }
 });
-
-function titlesBySection(readingList: ReadingList) {
-  const sections = readingList.getSections();
-  if (!sections.ok) throw new Error(sections.error.message);
-  return Object.fromEntries(
-    sections.value.map(({ status, books }) => [
-      status,
-      books.map((book) => book.title),
-    ]),
-  );
-}
 
 describe("cadastrar", () => {
   test("a Livro registered in Quero ler appears in the Fila with its Título and Autoria", () => {

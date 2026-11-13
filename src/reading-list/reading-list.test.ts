@@ -324,6 +324,148 @@ describe("ordenação", () => {
   });
 });
 
+describe("mudar Situação", () => {
+  test("moving a Livro from the Fila to Lendo takes it out of the Fila and puts it at the top of Lendo", () => {
+    const { readingList, clock } = inMemoryReadingList();
+    clock.now = 1_000;
+    register(readingList, "Já em Lendo", "reading");
+    const book = register(readingList, "Dom Casmurro", "want_to_read");
+    clock.now = 2_000;
+
+    expect(readingList.changeStatus(book.id, "reading")).toMatchObject({
+      ok: true,
+      value: { title: "Dom Casmurro", status: "reading" },
+    });
+    expect(titlesBySection(readingList)).toMatchObject({
+      reading: ["Dom Casmurro", "Já em Lendo"],
+      want_to_read: [],
+    });
+  });
+
+  test("every Situação can change to every other Situação", () => {
+    const statuses = ["want_to_read", "reading", "read", "abandoned"];
+    for (const from of statuses) {
+      for (const to of statuses.filter((status) => status !== from)) {
+        const { readingList } = inMemoryReadingList();
+        const book = register(readingList, `${from} → ${to}`, from);
+
+        expect(readingList.changeStatus(book.id, to)).toMatchObject({
+          ok: true,
+        });
+        expect(titlesBySection(readingList)[to]).toEqual([`${from} → ${to}`]);
+        expect(titlesBySection(readingList)[from]).toEqual([]);
+      }
+    }
+  });
+
+  test("choosing the Situação the Livro already has changes nothing", () => {
+    const { readingList, clock } = inMemoryReadingList();
+    clock.now = 1_000;
+    const a = register(readingList, "A", "read");
+    clock.now = 2_000;
+    register(readingList, "B", "read");
+    clock.now = 3_000;
+
+    expect(readingList.changeStatus(a.id, "read")).toMatchObject({ ok: true });
+    expect(titlesBySection(readingList).read).toEqual(["B", "A"]);
+  });
+
+  test("a Livro back in Quero ler returns to the Fila by its registration, not by the change", () => {
+    const { readingList, clock } = inMemoryReadingList();
+    clock.now = 1_000;
+    const a = register(readingList, "A", "reading");
+    clock.now = 2_000;
+    register(readingList, "B", "want_to_read");
+    clock.now = 3_000;
+
+    readingList.changeStatus(a.id, "want_to_read");
+
+    expect(titlesBySection(readingList).want_to_read).toEqual(["A", "B"]);
+  });
+
+  test("Livros moved at the same instant are shown with the latest change first", () => {
+    const { readingList } = inMemoryReadingList();
+    const a = register(readingList, "A", "want_to_read");
+    const b = register(readingList, "B", "want_to_read");
+
+    readingList.changeStatus(b.id, "read");
+    readingList.changeStatus(a.id, "read");
+
+    expect(titlesBySection(readingList).read).toEqual(["A", "B"]);
+  });
+
+  test("moving to read, Lido then Lendo (rereading) and Abandonado then Lendo (resuming) are accepted", () => {
+    const { readingList, clock } = inMemoryReadingList();
+    const book = register(readingList, "Dom Casmurro", "want_to_read");
+
+    for (const [moment, status] of [
+      [1, "read"],
+      [2, "reading"],
+      [3, "abandoned"],
+      [4, "reading"],
+    ] as const) {
+      clock.now = moment;
+      expect(readingList.changeStatus(book.id, status)).toMatchObject({
+        ok: true,
+        value: { status },
+      });
+    }
+    expect(titlesBySection(readingList).reading).toEqual(["Dom Casmurro"]);
+  });
+
+  test("a Situação outside the four is refused with 'Situação inválida.' and nothing changes", () => {
+    const { readingList } = inMemoryReadingList();
+    const book = register(readingList, "Dom Casmurro", "want_to_read");
+
+    for (const status of ["paused", "Lendo", "", null]) {
+      expect(readingList.changeStatus(book.id, status)).toEqual({
+        ok: false,
+        error: { kind: "invalid-status", message: "Situação inválida." },
+      });
+    }
+    expect(titlesBySection(readingList).want_to_read).toEqual(["Dom Casmurro"]);
+  });
+
+  test("changing a Livro that does not exist is refused with 'Livro não encontrado.'", () => {
+    const { readingList } = inMemoryReadingList();
+    register(readingList, "Dom Casmurro", "want_to_read");
+
+    for (const id of [999, "999", "abc", null]) {
+      expect(readingList.changeStatus(id, "read")).toEqual({
+        ok: false,
+        error: { kind: "not-found", message: "Livro não encontrado." },
+      });
+    }
+    expect(titlesBySection(readingList).want_to_read).toEqual(["Dom Casmurro"]);
+  });
+
+  test("an identifier sent as text (as forms do) is accepted", () => {
+    const { readingList } = inMemoryReadingList();
+    const book = register(readingList, "Dom Casmurro", "want_to_read");
+
+    expect(readingList.changeStatus(String(book.id), "read")).toMatchObject({
+      ok: true,
+    });
+  });
+
+  test("a storage failure is reported with the save message", () => {
+    const closed = new DatabaseSync(":memory:");
+    closed.close();
+    const readingList = createReadingList(
+      () => closed,
+      () => 0,
+    );
+
+    expect(readingList.changeStatus(1, "read")).toEqual({
+      ok: false,
+      error: {
+        kind: "storage",
+        message: "Não foi possível salvar. Tente novamente.",
+      },
+    });
+  });
+});
+
 describe("persistência", () => {
   test("after a restart the same Livros are in the same sections and order", () => {
     const path = join(tempDir(), "reading-list.db");

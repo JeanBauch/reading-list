@@ -1,6 +1,7 @@
 import { connection } from "next/server";
 import { readingList } from "@/reading-list/instance";
 import { SECTION_TEXT, sectionHeadingId } from "./labels";
+import { StatusControl } from "./status-control";
 
 /** The four sections of the Lista de leitura, read from the database on every request. */
 export async function ReadingListSections() {
@@ -38,9 +39,13 @@ export async function ReadingListSections() {
             ) : (
               <ul className="flex flex-col gap-2">
                 {books.map((book) => (
-                  <li key={book.id} className="rounded border p-3">
+                  <li
+                    key={book.id}
+                    className="flex flex-col gap-2 rounded border p-3"
+                  >
                     <p className="font-medium">{book.title}</p>
                     <p className="text-zinc-600">{book.authorship}</p>
+                    <StatusControl book={book} />
                   </li>
                 ))}
               </ul>

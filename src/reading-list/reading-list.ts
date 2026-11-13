@@ -30,6 +30,8 @@ export type ValidationFailure = {
   kind: "validation";
   fieldErrors: Partial<Record<"title" | "authorship" | "status", string>>;
 };
+export type InvalidStatusFailure = { kind: "invalid-status"; message: string };
+export type NotFoundFailure = { kind: "not-found"; message: string };
 
 export type Result<T, F> = { ok: true; value: T } | { ok: false; error: F };
 
@@ -45,6 +47,11 @@ export type ReadingList = {
   register(
     input: RegisterInput,
   ): Result<Book, ValidationFailure | StorageFailure>;
+  /** Choosing the Situação the Livro already has changes nothing, not even its change moment. */
+  changeStatus(
+    id: unknown,
+    status: unknown,
+  ): Result<Book, InvalidStatusFailure | NotFoundFailure | StorageFailure>;
 };
 
 /** Milliseconds since the epoch. Production uses the system clock; tests control it. */
@@ -58,6 +65,7 @@ export const MESSAGES = {
   authorshipRequired: "Informe a autoria.",
   authorshipTooLong: "A autoria deve ter no máximo 200 caracteres.",
   invalidStatus: "Situação inválida.",
+  notFound: "Livro não encontrado.",
 } as const;
 
 const MAX_TEXT_LENGTH = 200;
@@ -65,6 +73,20 @@ const MAX_TEXT_LENGTH = 200;
 function isStatus(value: unknown): value is Status {
   return (STATUSES as readonly unknown[]).includes(value);
 }
+
+/** Accepts a positive integer, or its decimal text as forms send it. */
+function parseId(value: unknown): number | undefined {
+  const id =
+    typeof value === "string" && /^\d+$/.test(value) ? Number(value) : value;
+  return typeof id === "number" && Number.isSafeInteger(id) && id > 0
+    ? id
+    : undefined;
+}
+
+const NOT_FOUND = {
+  ok: false,
+  error: { kind: "not-found", message: MESSAGES.notFound },
+} as const;
 
 /**
  * Trims with JavaScript's standard trim and checks the length in Unicode code points.
@@ -157,34 +179,45 @@ export function createReadingList(
     return ready;
   }
 
-  /** Runs database work, turning any storage error into a storage failure result. */
-  function attempt<T>(
-    work: (db: DatabaseSync) => T,
+  /**
+   * Runs database work that returns its own result, turning any storage error into a
+   * storage failure carrying the given message.
+   */
+  function attempt<T, F>(
+    work: (db: DatabaseSync) => Result<T, F>,
     message: string,
-  ): { ok: true; value: T } | { ok: false; error: StorageFailure } {
+  ): Result<T, F | StorageFailure> {
     try {
-      return { ok: true, value: work(database()) };
+      return work(database());
     } catch {
       return { ok: false, error: { kind: "storage", message } };
     }
   }
 
+  function findBook(db: DatabaseSync, id: number | undefined) {
+    if (id === undefined) return undefined;
+    const row = db
+      .prepare(`SELECT ${BOOK_COLUMNS} FROM books WHERE id = ?`)
+      .get(id) as Book | undefined;
+    return row && toBook(row);
+  }
+
   return {
     getSections() {
-      return attempt(
-        (db) =>
-          SECTION_ORDER.map((status) => {
-            const rows = db
-              .prepare(
-                `SELECT ${BOOK_COLUMNS} FROM books WHERE status = ?
-                 ORDER BY ${SECTION_SORT[status]}`,
-              )
-              .all(status) as Book[];
-            return { status, books: rows.map(toBook) };
-          }),
-        MESSAGES.loadFailed,
-      );
+      return attempt((db) => {
+        const sections = SECTION_ORDER.map((status) => {
+          const rows = db
+            .prepare(
+              `SELECT ${BOOK_COLUMNS} FROM books WHERE status = ?
+               ORDER BY ${SECTION_SORT[status]}`,
+            )
+            .all(status) as Book[];
+          return { status, books: rows.map(toBook) };
+        });
+        return { ok: true, value: sections };
+      }, MESSAGES.loadFailed);
     },
+
     register(input) {
       const validated = validateFields(input);
       const { status } = input;
@@ -201,21 +234,44 @@ export function createReadingList(
           .prepare(
             `INSERT INTO books
                (title, authorship, status, registered_at, status_changed_at, change_sequence)
-             VALUES (?, ?, ?, ?, ?, (SELECT coalesce(max(change_sequence), 0) + 1 FROM books))
+             VALUES (?, ?, ?, ?, ?, ${NEXT_CHANGE_SEQUENCE})
              RETURNING ${BOOK_COLUMNS}`,
           )
-          .get(
-            title,
-            authorship,
-            status,
-            moment,
-            moment,
-          ) as Book;
-        return toBook(row);
+          .get(title, authorship, status, moment, moment) as Book;
+        return { ok: true, value: toBook(row) };
+      }, MESSAGES.saveFailed);
+    },
+
+    changeStatus(id, status) {
+      if (!isStatus(status)) {
+        return {
+          ok: false,
+          error: { kind: "invalid-status", message: MESSAGES.invalidStatus },
+        };
+      }
+      const bookId = parseId(id);
+
+      return attempt((db) => {
+        const book = findBook(db, bookId);
+        if (!book) return NOT_FOUND;
+        if (book.status === status) return { ok: true, value: book };
+        const row = db
+          .prepare(
+            `UPDATE books
+             SET status = ?, status_changed_at = ?, change_sequence = ${NEXT_CHANGE_SEQUENCE}
+             WHERE id = ?
+             RETURNING ${BOOK_COLUMNS}`,
+          )
+          .get(status, now(), book.id) as Book;
+        return { ok: true, value: toBook(row) };
       }, MESSAGES.saveFailed);
     },
   };
 }
+
+/** Each effective change of Situação (registration included) takes the next number. */
+const NEXT_CHANGE_SEQUENCE =
+  "(SELECT coalesce(max(change_sequence), 0) + 1 FROM books)";
 
 const BOOK_COLUMNS = "id, title, authorship, status";
 

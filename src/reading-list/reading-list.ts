@@ -1,19 +1,14 @@
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import { DatabaseSync } from "node:sqlite";
+import { STATUSES, type Status } from "./status";
+
+export { STATUSES, type Status } from "./status";
 
 /**
  * Reading List module (Lista de leitura): the only gateway to the Leitor's data.
  * Every domain rule and every database access lives here. Server code only (ADR-0002).
  */
-
-export const STATUSES = [
-  "want_to_read",
-  "reading",
-  "read",
-  "abandoned",
-] as const;
-export type Status = (typeof STATUSES)[number];
 
 export type Book = {
   id: number;
@@ -175,15 +170,21 @@ export function createReadingList(
   connect: () => DatabaseSync,
   now: Clock,
 ): ReadingList {
-  let ready: DatabaseSync | undefined;
-  let connection: DatabaseSync | undefined;
+  // Set only once the schema is known to be ours; until then every use tries again.
+  let preparedDatabase: DatabaseSync | undefined;
 
   function database(): DatabaseSync {
-    if (ready) return ready;
-    connection ??= connect();
-    prepareSchema(connection);
-    ready = connection;
-    return ready;
+    if (preparedDatabase) return preparedDatabase;
+    const opened = connect();
+    try {
+      prepareSchema(opened);
+    } catch (error) {
+      // Drop the connection (and any half-done schema transaction) so the next use reopens the file.
+      if (opened.isOpen) opened.close();
+      throw error;
+    }
+    preparedDatabase = opened;
+    return opened;
   }
 
   /**
@@ -196,7 +197,10 @@ export function createReadingList(
   ): Result<T, F | StorageFailure> {
     try {
       return work(database());
-    } catch {
+    } catch (error) {
+      // The Leitor sees the final message; the cause goes to the server log for diagnosis.
+      // SQLite errors never carry the bound values, so no Título or Autoria is logged.
+      console.error("Reading list storage failure:", error);
       return { ok: false, error: { kind: "storage", message } };
     }
   }
@@ -341,7 +345,7 @@ function prepareSchema(db: DatabaseSync): void {
       title TEXT NOT NULL,
       authorship TEXT NOT NULL,
       status TEXT NOT NULL
-        CHECK (status IN ('want_to_read', 'reading', 'read', 'abandoned')),
+        CHECK (status IN (${STATUSES.map((status) => `'${status}'`).join(", ")})),
       registered_at INTEGER NOT NULL,
       status_changed_at INTEGER NOT NULL,
       change_sequence INTEGER NOT NULL

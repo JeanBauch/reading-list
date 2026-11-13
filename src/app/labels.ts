@@ -1,4 +1,4 @@
-import type { Status } from "@/reading-list/reading-list";
+import { STATUSES, type Status } from "@/reading-list/status";
 
 /** Portuguese names of each Situação, as shown in the interface. */
 export const STATUS_LABELS: Record<Status, string> = {
@@ -9,7 +9,7 @@ export const STATUS_LABELS: Record<Status, string> = {
 };
 
 /** The Situações in the order the selectors offer them. */
-export const STATUS_OPTIONS = Object.keys(STATUS_LABELS) as Status[];
+export const STATUS_OPTIONS = STATUSES;
 
 /** Heading and empty-state message of the section that holds each Situação. */
 export const SECTION_TEXT: Record<Status, { heading: string; empty: string }> =

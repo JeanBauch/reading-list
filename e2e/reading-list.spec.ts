@@ -307,3 +307,119 @@ test("cancelling an edit keeps the previous Título and Autoria", async ({
   await page.reload();
   await expect(section(page, "Lido")).not.toContainText("Ubirajara");
 });
+
+function book(page: Page, sectionName: string, title: string) {
+  return section(page, sectionName)
+    .getByRole("listitem")
+    .filter({ hasText: title });
+}
+
+test("Excluir asks for confirmation next to the Livro, and Cancelar keeps it", async ({
+  page,
+}) => {
+  page.on("dialog", (dialog) => {
+    throw new Error(`Unexpected native dialog: ${dialog.message()}`);
+  });
+  await page.goto("/");
+
+  await page.getByRole("button", { name: "Excluir Clique duplo" }).click();
+  const item = book(page, "Fila", "Clique duplo");
+  await expect(
+    item.getByRole("button", { name: "Confirmar exclusão" }),
+  ).toBeVisible();
+  await item.getByRole("button", { name: "Cancelar" }).click();
+
+  await expect(
+    page.getByRole("button", { name: "Excluir Clique duplo" }),
+  ).toBeFocused();
+  await page.reload();
+  await expect(section(page, "Fila")).toContainText("Clique duplo");
+});
+
+test("confirming removes the Livro for good and focuses the next Livro in the section", async ({
+  page,
+}) => {
+  await page.goto("/");
+
+  await page.getByRole("button", { name: "Excluir O Cortiço" }).click();
+  await book(page, "Lido", "O Cortiço")
+    .getByRole("button", { name: "Confirmar exclusão" })
+    .click();
+
+  await expect(section(page, "Lido").getByRole("listitem")).toHaveText([
+    /Iracema/,
+    /Belas Maldições/,
+    /Memórias Póstumas de Brás Cubas/,
+  ]);
+  await expect(book(page, "Lido", "Belas Maldições")).toBeFocused();
+  await page.reload();
+  await expect(page.getByRole("main")).not.toContainText("O Cortiço");
+});
+
+test("removing the last Livro of a section focuses the previous one", async ({
+  page,
+}) => {
+  await page.goto("/");
+
+  await page
+    .getByRole("button", { name: "Excluir Memórias Póstumas de Brás Cubas" })
+    .click();
+  await book(page, "Lido", "Memórias Póstumas de Brás Cubas")
+    .getByRole("button", { name: "Confirmar exclusão" })
+    .click();
+
+  await expect(section(page, "Lido").getByRole("listitem")).toHaveCount(2);
+  await expect(book(page, "Lido", "Belas Maldições")).toBeFocused();
+});
+
+test("removing the only Livro of a section focuses the section heading, which shows the empty message", async ({
+  page,
+}) => {
+  await page.goto("/");
+
+  await page.getByRole("button", { name: "Excluir Clique duplo" }).click();
+  await book(page, "Fila", "Clique duplo")
+    .getByRole("button", { name: "Confirmar exclusão" })
+    .click();
+
+  await expect(section(page, "Fila")).toContainText("Nenhum livro na Fila.");
+  await expect(page.getByRole("heading", { name: "Fila" })).toBeFocused();
+});
+
+test("an abandoned Livro stays visible in Abandonado, unlike a removed one", async ({
+  page,
+}) => {
+  await page.goto("/");
+
+  await page
+    .getByLabel("Situação de Já em Lendo", { exact: true })
+    .selectOption({ label: "Abandonado" });
+  await page.getByRole("button", { name: "Mover Já em Lendo" }).click();
+
+  await expect(section(page, "Abandonado")).toContainText("Já em Lendo");
+  await expect(page.getByRole("heading", { name: "Abandonado" })).toBeFocused();
+});
+
+test("acting on a Livro removed in another tab shows 'Livro não encontrado.' next to it", async ({
+  page,
+}) => {
+  await page.goto("/");
+  const otherTab = await page.context().newPage();
+  await otherTab.goto("/");
+  await otherTab.getByRole("button", { name: "Excluir Iracema" }).click();
+  await book(otherTab, "Lido", "Iracema")
+    .getByRole("button", { name: "Confirmar exclusão" })
+    .click();
+  await expect(section(otherTab, "Lido")).not.toContainText("Iracema");
+
+  await page
+    .getByLabel("Situação de Iracema", { exact: true })
+    .selectOption({ label: "Lendo" });
+  await page.getByRole("button", { name: "Mover Iracema" }).click();
+
+  const item = book(page, "Lido", "Iracema");
+  await expect(item.getByRole("alert")).toHaveText("Livro não encontrado.");
+  await expect(
+    page.getByLabel("Situação de Iracema", { exact: true }),
+  ).toHaveValue("read");
+});

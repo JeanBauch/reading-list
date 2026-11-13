@@ -57,6 +57,8 @@ export type ReadingList = {
     id: unknown,
     status: unknown,
   ): Result<Book, InvalidStatusFailure | NotFoundFailure | StorageFailure>;
+  /** Deletes the Livro for good (unlike moving it to Abandonado). */
+  remove(id: unknown): Result<void, NotFoundFailure | StorageFailure>;
 };
 
 /** Milliseconds since the epoch. Production uses the system clock; tests control it. */
@@ -288,6 +290,17 @@ export function createReadingList(
           )
           .get(title, authorship, book.id) as Book;
         return { ok: true, value: toBook(row) };
+      }, MESSAGES.saveFailed);
+    },
+
+    remove(id) {
+      const bookId = parseId(id);
+      return attempt((db) => {
+        if (bookId === undefined) return NOT_FOUND;
+        const { changes } = db
+          .prepare("DELETE FROM books WHERE id = ?")
+          .run(bookId);
+        return changes === 0 ? NOT_FOUND : { ok: true, value: undefined };
       }, MESSAGES.saveFailed);
     },
   };

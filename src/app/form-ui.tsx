@@ -9,6 +9,12 @@ export const BUTTON_CLASS = `self-start rounded bg-zinc-900 px-3 py-1 text-white
 
 export const SECONDARY_BUTTON_CLASS = `self-start rounded border border-zinc-400 px-3 py-1 disabled:opacity-50 ${FOCUS_RING}`;
 
+export const DANGER_BUTTON_CLASS = `self-start rounded bg-red-700 px-3 py-1 text-white disabled:opacity-50 ${FOCUS_RING}`;
+
+/** For elements that receive focus from the app (section headings, Livros), not by Tab. */
+export const FOCUS_TARGET_CLASS =
+  "focus:outline-2 focus:outline-offset-4 focus:outline-blue-600";
+
 /** Links a field to its error message so screen readers announce them together. */
 export function errorProps(id: string, error: string | undefined) {
   return error

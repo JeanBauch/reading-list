@@ -1,6 +1,7 @@
 import { connection } from "next/server";
 import { readingList } from "@/reading-list/instance";
 import { BookItem } from "./book-item";
+import { FOCUS_TARGET_CLASS } from "./form-ui";
 import { SECTION_TEXT, sectionHeadingId } from "./labels";
 
 /** The four sections of the Lista de leitura, read from the database on every request. */
@@ -30,7 +31,7 @@ export async function ReadingListSections() {
             <h2
               id={headingId}
               tabIndex={-1}
-              className="mb-2 text-xl font-semibold"
+              className={`mb-2 text-xl font-semibold ${FOCUS_TARGET_CLASS}`}
             >
               {text.heading}
             </h2>
@@ -41,7 +42,9 @@ export async function ReadingListSections() {
                 {books.map((book) => (
                   <li
                     key={book.id}
-                    className="flex flex-col gap-2 rounded border p-3"
+                    // Focus lands here after the Livro above it is removed.
+                    tabIndex={-1}
+                    className={`flex flex-col gap-2 rounded border p-3 ${FOCUS_TARGET_CLASS}`}
                   >
                     <BookItem book={book} />
                   </li>

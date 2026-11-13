@@ -1,10 +1,12 @@
 # reading-list
 
 ## Framework rules
+
 Claude Code reads this file instead of AGENTS.md, so the Next.js agent rules are imported here:
 @AGENTS.md
 
 ## Commands
+
 - Install: `pnpm install`
 - Dev server: `pnpm dev`
 - One test file: `pnpm vitest run path/to/file.test.ts`
@@ -12,6 +14,7 @@ Claude Code reads this file instead of AGENTS.md, so the Next.js agent rules are
 - Typecheck: `pnpm typecheck` · Lint: `pnpm lint` · Unit: `pnpm test` · E2E: `pnpm test:e2e`
 
 ## Workflow rules
+
 - Specs and tickets live in GitHub Issues (labels `type:spec`, `type:ticket`); see `docs/agents/issue-tracker.md`. Never put file paths or code in them.
 - One branch per spec: `feat/<spec#>-<slug>`. One commit per ticket: `feat(#<ticket>): <summary>`.
 - Never push to `main`, never merge PRs, never edit `.env*` or lockfiles. The human merges.
@@ -21,9 +24,11 @@ Claude Code reads this file instead of AGENTS.md, so the Next.js agent rules are
 - Language: issues, PRs, ADRs and `GLOSSARY.md` in Brazilian Portuguese; code, identifiers and commit messages in English.
 
 ## Gotchas
+
 <!-- Filled by /retro: only things Claude got wrong twice. -->
 
 ## Pointers
+
 - Domain terms: `GLOSSARY.md` · Decisions: `docs/adr/` · Review standards: `CODING_STANDARDS.md`
 
 ## Agent skills

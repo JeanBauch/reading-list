@@ -8,6 +8,9 @@ export const STATUS_LABELS: Record<Status, string> = {
   abandoned: "Abandonado",
 };
 
+/** The Situações in the order the selectors offer them. */
+export const STATUS_OPTIONS = Object.keys(STATUS_LABELS) as Status[];
+
 /** Heading and empty-state message of the section that holds each Situação. */
 export const SECTION_TEXT: Record<Status, { heading: string; empty: string }> =
   {

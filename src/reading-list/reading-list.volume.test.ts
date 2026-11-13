@@ -1,92 +1,117 @@
 // @vitest-environment node
-import { DatabaseSync } from "node:sqlite";
 import { describe, expect, test } from "vitest";
-import { createReadingList, STATUSES } from "./reading-list";
+import { inMemoryReadingList, titlesBySection } from "./test-support";
 
 /**
  * Requirement "with 1.000 Livros the page loads and registering shows no noticeable delay".
- * Measured on a development machine: about 1.6 ms to read the list and 47 ms to register all
- * 1.000 Livros (under 0.1 ms each). The limits below are hundreds of times the measured read and the
- * single registration (about 0.2 ms), so a loaded CI runner never trips them, while a regression such as a
- * query per Livro or a missing sort in SQL, which costs seconds, still does.
+ *
+ * Each timing is the fastest of SAMPLES runs after one warm-up run, so a GC pause or a busy CI
+ * worker only slows some samples, not the one that counts. Measured on a development machine
+ * (in-memory SQLite, fastest sample):
+ *
+ * - reading the sections: about 0.7 ms. A per-Livro query that prepares a statement for each
+ *   Livro costs about 4.8 ms, so the 3 ms read limit catches it with about 4x headroom over
+ *   today. It does NOT catch a per-Livro query reusing one prepared statement (about 1.3 ms) or
+ *   sorting in JavaScript instead of SQL (about 0.6 ms, no slower than today): both are too
+ *   close to today's cost for a limit that must not flake on CI. Order regressions are caught
+ *   by the order test below instead.
+ * - registering one Livro on a full list: about 0.04 ms. A registration that also reads the
+ *   whole list back costs about 0.36 ms with one query and about 0.8 ms through the sections,
+ *   so the 0.2 ms register limit catches both with about 5x headroom over today. A smaller
+ *   extra cost per registration (well under 0.2 ms) goes unnoticed.
  */
-const READ_LIMIT_MS = 150;
-const REGISTER_LIMIT_MS = 100;
-const VOLUME = 1_000;
+const READ_LIMIT_MS = 3;
+const REGISTER_LIMIT_MS = 0.2;
+const SAMPLES = 10;
+const BOOK_COUNT = 1_000;
+
+/** The Situações the setup cycles through, Livro 0 first: Livro n gets SITUATION_CYCLE[n % 4]. */
+const SITUATION_CYCLE = [
+  "want_to_read",
+  "reading",
+  "read",
+  "abandoned",
+] as const;
+const BOOKS_PER_SITUATION = BOOK_COUNT / SITUATION_CYCLE.length;
 
 function fullReadingList() {
-  const clock = { now: 1_000 };
-  const readingList = createReadingList(
-    () => new DatabaseSync(":memory:"),
-    () => clock.now,
-  );
-  for (let index = 0; index < VOLUME; index++) {
+  const { readingList, clock } = inMemoryReadingList();
+  const ids: number[] = [];
+  for (let index = 0; index < BOOK_COUNT; index++) {
     clock.now += 1;
     const registered = readingList.register({
       title: `Livro ${index}`,
       authorship: "Autoria",
-      status: STATUSES[index % STATUSES.length],
+      status: SITUATION_CYCLE[index % SITUATION_CYCLE.length],
     });
-    if (!registered.ok) throw new Error("setup failed");
+    if (!registered.ok) throw new Error(JSON.stringify(registered.error));
+    ids.push(registered.value.id);
   }
-  return { readingList, clock };
+  return { readingList, clock, ids };
 }
 
-function elapsedMs(work: () => void) {
-  const start = performance.now();
+/** Runs the work once to warm up, then returns the fastest of SAMPLES timed runs. */
+function fastestMs(work: () => void) {
   work();
-  return performance.now() - start;
+  let fastest = Infinity;
+  for (let sample = 0; sample < SAMPLES; sample++) {
+    const start = performance.now();
+    work();
+    fastest = Math.min(fastest, performance.now() - start);
+  }
+  return fastest;
 }
 
 describe("with 1.000 Livros", () => {
   test("getting the sections stays under the read limit", () => {
     const { readingList } = fullReadingList();
+    const results: unknown[] = [];
 
-    const elapsed = elapsedMs(() => {
-      expect(readingList.getSections()).toMatchObject({ ok: true });
+    const elapsed = fastestMs(() => {
+      results.push(readingList.getSections());
     });
 
+    for (const result of results) expect(result).toMatchObject({ ok: true });
     expect(elapsed).toBeLessThan(READ_LIMIT_MS);
   });
 
   test("registering one more Livro stays under the register limit", () => {
     const { readingList, clock } = fullReadingList();
-    clock.now += 1;
+    const results: unknown[] = [];
 
-    const elapsed = elapsedMs(() => {
-      expect(
+    const elapsed = fastestMs(() => {
+      clock.now += 1;
+      results.push(
         readingList.register({
           title: "Mais um",
           authorship: "Autoria",
           status: "want_to_read",
         }),
-      ).toMatchObject({ ok: true });
+      );
     });
 
+    for (const result of results) expect(result).toMatchObject({ ok: true });
     expect(elapsed).toBeLessThan(REGISTER_LIMIT_MS);
   });
 
   test("the sections keep their order: Fila oldest first, the others latest change first", () => {
-    const { readingList } = fullReadingList();
-    // Livro 0 (Quero ler) moves to Lido last, so it must head Lido.
-    readingList.changeStatus(1, "read");
+    const { readingList, clock, ids } = fullReadingList();
+    // Livro 0 (Quero ler) moves to Lido after every other change, so it must head Lido.
+    clock.now += 1;
+    expect(readingList.changeStatus(ids[0], "read")).toMatchObject({
+      ok: true,
+    });
 
-    const result = readingList.getSections();
-    if (!result.ok) throw new Error(result.error.message);
-    const titles = Object.fromEntries(
-      result.value.map(({ status, books }) => [
-        status,
-        books.map((book) => book.title),
-      ]),
-    );
+    const titles = titlesBySection(readingList);
 
-    expect(result.value.map(({ status }) => status)).toEqual([
+    expect(Object.keys(titles)).toEqual([
       "reading",
       "want_to_read",
       "read",
       "abandoned",
     ]);
-    expect(titles.want_to_read).toHaveLength(250 - 1);
+    const filaWithoutLivro0 = BOOKS_PER_SITUATION - 1;
+    expect(titles.want_to_read).toHaveLength(filaWithoutLivro0);
     expect(titles.want_to_read.slice(0, 3)).toEqual([
       "Livro 4",
       "Livro 8",

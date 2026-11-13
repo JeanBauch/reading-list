@@ -25,3 +25,17 @@ Claude Code reads this file instead of AGENTS.md, so the Next.js agent rules are
 
 ## Pointers
 - Domain terms: `GLOSSARY.md` · Decisions: `docs/adr/` · Review standards: `CODING_STANDARDS.md`
+
+## Agent skills
+
+### Issue tracker
+
+Specs and tickets live in GitHub Issues (`gh` CLI). See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Default five-role vocabulary (`needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`). See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context: root `GLOSSARY.md` + `docs/adr/`. See `docs/agents/domain.md`.

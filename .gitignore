@@ -50,3 +50,6 @@ next-env.d.ts
 CLAUDE.local.md
 .claude/settings.local.json
 .claude/worktrees/
+
+# reading list database (local data, never versioned)
+/data/

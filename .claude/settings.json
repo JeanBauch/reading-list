@@ -82,7 +82,7 @@
             "command": "node",
             "args": ["${CLAUDE_PROJECT_DIR}/.claude/hooks/verify-gate.mjs"],
             "timeout": 600,
-            "statusMessage": "verify-gate: typecheck + related tests"
+            "statusMessage": "verify-gate: format + typecheck + related tests"
           }
         ]
       }

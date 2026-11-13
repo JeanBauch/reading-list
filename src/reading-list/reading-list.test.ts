@@ -572,6 +572,56 @@ describe("editar", () => {
   });
 });
 
+describe("excluir", () => {
+  test("a removed Livro disappears from every section for good", () => {
+    const { readingList } = inMemoryReadingList();
+    const book = register(readingList, "Dom Casmurro", "want_to_read");
+    register(readingList, "Outro", "want_to_read");
+
+    expect(readingList.remove(book.id)).toEqual({ ok: true, value: undefined });
+    expect(titlesBySection(readingList)).toEqual({
+      reading: [],
+      want_to_read: ["Outro"],
+      read: [],
+      abandoned: [],
+    });
+    expect(readingList.changeStatus(book.id, "read")).toMatchObject({
+      ok: false,
+      error: { kind: "not-found" },
+    });
+  });
+
+  test("removing a Livro that does not exist is refused with 'Livro não encontrado.'", () => {
+    const { readingList } = inMemoryReadingList();
+    const book = register(readingList, "Dom Casmurro", "want_to_read");
+    readingList.remove(book.id);
+
+    for (const id of [book.id, 999, "abc"]) {
+      expect(readingList.remove(id)).toEqual({
+        ok: false,
+        error: { kind: "not-found", message: "Livro não encontrado." },
+      });
+    }
+  });
+
+  test("a storage failure is reported with the save message", () => {
+    const closed = new DatabaseSync(":memory:");
+    closed.close();
+    const readingList = createReadingList(
+      () => closed,
+      () => 0,
+    );
+
+    expect(readingList.remove(1)).toEqual({
+      ok: false,
+      error: {
+        kind: "storage",
+        message: "Não foi possível salvar. Tente novamente.",
+      },
+    });
+  });
+});
+
 describe("persistência", () => {
   test("after a restart the same Livros are in the same sections and order", () => {
     const path = join(tempDir(), "reading-list.db");

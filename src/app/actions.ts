@@ -36,3 +36,10 @@ export async function editBook(formData: FormData) {
   refresh();
   return { ok: true } as const;
 }
+
+export async function removeBook(formData: FormData) {
+  const result = readingList.remove(formData.get("id"));
+  if (!result.ok) return result;
+  refresh();
+  return { ok: true } as const;
+}

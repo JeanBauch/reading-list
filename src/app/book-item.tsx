@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import type { Book } from "@/reading-list/reading-list";
-import { editBook } from "./actions";
+import { editBook, removeBook } from "./actions";
 import {
   BUTTON_CLASS,
+  DANGER_BUTTON_CLASS,
   errorProps,
   Field,
   INPUT_CLASS,
@@ -13,43 +14,134 @@ import {
 import { StatusControl } from "./status-control";
 import { useFormAction } from "./use-form-action";
 
+type Mode = "view" | "editing" | "confirming-removal";
+
 /** One Livro in its section: its Título and Autoria, and the controls that act on it. */
 export function BookItem({ book }: { book: Book }) {
-  const [editing, setEditing] = useState(false);
+  const [mode, setMode] = useState<Mode>("view");
   const editButton = useRef<HTMLButtonElement>(null);
-  const returnFocus = useRef(false);
+  const removeButton = useRef<HTMLButtonElement>(null);
+  // The button to focus once the edit form or the removal confirmation has closed.
+  const returnFocusTo = useRef<typeof editButton | null>(null);
 
   useEffect(() => {
-    if (!editing && returnFocus.current) {
-      returnFocus.current = false;
-      editButton.current?.focus();
+    if (mode === "view" && returnFocusTo.current) {
+      returnFocusTo.current.current?.focus();
+      returnFocusTo.current = null;
     }
-  }, [editing]);
+  }, [mode]);
 
-  function closeEdit() {
-    returnFocus.current = true;
-    setEditing(false);
+  function backToView(focus: typeof editButton) {
+    returnFocusTo.current = focus;
+    setMode("view");
   }
 
-  if (editing) return <EditForm book={book} onClose={closeEdit} />;
+  if (mode === "editing") {
+    return <EditForm book={book} onClose={() => backToView(editButton)} />;
+  }
 
   return (
     <>
       <p className="font-medium">{book.title}</p>
       <p className="text-zinc-600">{book.authorship}</p>
       <StatusControl book={book} />
+      {mode === "confirming-removal" ? (
+        <RemovalConfirmation
+          book={book}
+          onCancel={() => backToView(removeButton)}
+        />
+      ) : (
+        <div className="flex flex-wrap gap-2">
+          <button
+            ref={editButton}
+            type="button"
+            aria-label={`Editar ${book.title}`}
+            onClick={() => setMode("editing")}
+            className={SECONDARY_BUTTON_CLASS}
+          >
+            Editar
+          </button>
+          <button
+            ref={removeButton}
+            type="button"
+            aria-label={`Excluir ${book.title}`}
+            onClick={() => setMode("confirming-removal")}
+            className={SECONDARY_BUTTON_CLASS}
+          >
+            Excluir
+          </button>
+        </div>
+      )}
+    </>
+  );
+}
+
+/**
+ * Where focus goes after a Livro is removed: the next Livro in its section, else the
+ * previous one, else the section heading. Worked out before removing, while the Livro
+ * is still in the page.
+ */
+function focusTargetAfterRemoval(form: HTMLFormElement): HTMLElement | null {
+  const item = form.closest("li");
+  const neighbour = item?.nextElementSibling ?? item?.previousElementSibling;
+  if (neighbour instanceof HTMLElement) return neighbour;
+  return form.closest("section")?.querySelector("h2") ?? null;
+}
+
+/** "Confirmar exclusão" / "Cancelar", shown next to the Livro instead of a native dialog. */
+function RemovalConfirmation({
+  book,
+  onCancel,
+}: {
+  book: Book;
+  onCancel: () => void;
+}) {
+  const [error, setError] = useState<string | null>(null);
+  const focusAfter = useRef<HTMLElement | null>(null);
+  const { pending, handleSubmit } = useFormAction(removeBook, (result) => {
+    if (result.ok) {
+      focusAfter.current?.focus();
+      return;
+    }
+    setError(result.error.message);
+  });
+
+  function submit(event: FormEvent<HTMLFormElement>) {
+    focusAfter.current = focusTargetAfterRemoval(event.currentTarget);
+    handleSubmit(event);
+  }
+
+  return (
+    <form
+      noValidate
+      onSubmit={submit}
+      aria-label={`Excluir ${book.title}`}
+      className="flex flex-col gap-2"
+    >
+      <input type="hidden" name="id" value={book.id} />
       <div className="flex flex-wrap gap-2">
         <button
-          ref={editButton}
+          type="submit"
+          disabled={pending}
+          className={DANGER_BUTTON_CLASS}
+        >
+          Confirmar exclusão
+        </button>
+        <button
           type="button"
-          aria-label={`Editar ${book.title}`}
-          onClick={() => setEditing(true)}
+          autoFocus
+          onClick={onCancel}
           className={SECONDARY_BUTTON_CLASS}
         >
-          Editar
+          Cancelar
         </button>
       </div>
-    </>
+      {error && (
+        <p role="alert" className="text-sm text-red-700">
+          {error}
+        </p>
+      )}
+    </form>
   );
 }
 

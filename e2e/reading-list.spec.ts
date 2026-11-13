@@ -223,3 +223,87 @@ test("changing the selector with the keyboard without pressing Mover saves nothi
     page.getByLabel("Situação de Clique duplo", { exact: true }),
   ).toHaveValue("want_to_read");
 });
+
+test("editing a Livro's Título keeps it in the same Situação and position", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await register(page, "O Cortico", "Aluísio Azevedo", "Lido");
+  await expect(section(page, "Lido").getByRole("listitem")).toHaveCount(3);
+  await register(page, "Iracema", "José de Alencar", "Lido");
+  await expect(section(page, "Lido").getByRole("listitem")).toHaveCount(4);
+
+  await page
+    .getByRole("button", { name: "Editar O Cortico", exact: true })
+    .click();
+  const editForm = page.getByRole("form", { name: "Editar O Cortico" });
+  await expect(editForm.getByLabel("Título", { exact: true })).toHaveValue(
+    "O Cortico",
+  );
+  await expect(editForm.getByLabel("Autoria", { exact: true })).toHaveValue(
+    "Aluísio Azevedo",
+  );
+  await editForm.getByLabel("Título", { exact: true }).fill(" O Cortiço ");
+  await editForm.getByRole("button", { name: "Salvar" }).click();
+
+  await expect(section(page, "Lido").getByRole("listitem")).toHaveText([
+    /Iracema/,
+    /O Cortiço/,
+    /Belas Maldições/,
+    /Memórias Póstumas de Brás Cubas/,
+  ]);
+  await expect(
+    page.getByRole("button", { name: "Editar O Cortiço", exact: true }),
+  ).toBeFocused();
+
+  await page.reload();
+  await expect(section(page, "Lido").getByRole("listitem").nth(1)).toHaveText(
+    /O Cortiço.*Aluísio Azevedo/,
+  );
+});
+
+test("an invalid edit shows the error next to the field and changes nothing", async ({
+  page,
+}) => {
+  await page.goto("/");
+
+  await page
+    .getByRole("button", { name: "Editar Iracema", exact: true })
+    .click();
+  const editForm = page.getByRole("form", { name: "Editar Iracema" });
+  await editForm.getByLabel("Título", { exact: true }).fill("   ");
+  await editForm.getByRole("button", { name: "Salvar" }).click();
+
+  await expect(
+    editForm.getByLabel("Título", { exact: true }),
+  ).toHaveAccessibleDescription("Informe o título.");
+  await expect(editForm.getByLabel("Título", { exact: true })).toBeFocused();
+
+  await page.reload();
+  await expect(section(page, "Lido").getByRole("listitem").first()).toHaveText(
+    /Iracema/,
+  );
+});
+
+test("cancelling an edit keeps the previous Título and Autoria", async ({
+  page,
+}) => {
+  await page.goto("/");
+
+  await page
+    .getByRole("button", { name: "Editar Iracema", exact: true })
+    .click();
+  const editForm = page.getByRole("form", { name: "Editar Iracema" });
+  await editForm.getByLabel("Título", { exact: true }).fill("Ubirajara");
+  await editForm.getByLabel("Autoria", { exact: true }).fill("Outra pessoa");
+  await editForm.getByRole("button", { name: "Cancelar" }).click();
+
+  await expect(section(page, "Lido").getByRole("listitem").first()).toHaveText(
+    /Iracema.*José de Alencar/,
+  );
+  await expect(
+    page.getByRole("button", { name: "Editar Iracema", exact: true }),
+  ).toBeFocused();
+  await page.reload();
+  await expect(section(page, "Lido")).not.toContainText("Ubirajara");
+});

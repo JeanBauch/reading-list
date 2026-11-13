@@ -26,3 +26,13 @@ export async function changeBookStatus(formData: FormData) {
   refresh();
   return { ok: true, status: result.value.status } as const;
 }
+
+export async function editBook(formData: FormData) {
+  const result = readingList.edit(formData.get("id"), {
+    title: formData.get("title"),
+    authorship: formData.get("authorship"),
+  });
+  if (!result.ok) return result;
+  refresh();
+  return { ok: true } as const;
+}

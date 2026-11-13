@@ -466,6 +466,112 @@ describe("mudar Situação", () => {
   });
 });
 
+describe("editar", () => {
+  test("correcting the Título keeps the Livro in the same Situação and position", () => {
+    const { readingList, clock } = inMemoryReadingList();
+    clock.now = 1_000;
+    const typo = register(readingList, "Dom Casmuro", "read");
+    clock.now = 2_000;
+    register(readingList, "B", "read");
+    clock.now = 3_000;
+
+    expect(
+      readingList.edit(typo.id, {
+        title: "Dom Casmurro",
+        authorship: "Machado de Assis",
+      }),
+    ).toMatchObject({
+      ok: true,
+      value: {
+        title: "Dom Casmurro",
+        authorship: "Machado de Assis",
+        status: "read",
+      },
+    });
+    expect(titlesBySection(readingList).read).toEqual(["B", "Dom Casmurro"]);
+  });
+
+  test("editing a Livro in the Fila keeps its place in the Fila", () => {
+    const { readingList } = inMemoryReadingList();
+    const a = register(readingList, "A", "want_to_read");
+    register(readingList, "B", "want_to_read");
+
+    readingList.edit(a.id, { title: "A editado", authorship: "Autoria" });
+
+    expect(titlesBySection(readingList).want_to_read).toEqual([
+      "A editado",
+      "B",
+    ]);
+  });
+
+  test("editing follows the registration rules: trimming, blank and 200 code points", () => {
+    const { readingList } = inMemoryReadingList();
+    const book = register(readingList, "Dom Casmurro", "want_to_read");
+
+    expect(
+      readingList.edit(book.id, { title: "", authorship: "Machado de Assis" }),
+    ).toEqual({
+      ok: false,
+      error: { kind: "validation", fieldErrors: { title: "Informe o título." } },
+    });
+    expect(
+      readingList.edit(book.id, {
+        title: "Dom Casmurro",
+        authorship: "b".repeat(201),
+      }),
+    ).toEqual({
+      ok: false,
+      error: {
+        kind: "validation",
+        fieldErrors: {
+          authorship: "A autoria deve ter no máximo 200 caracteres.",
+        },
+      },
+    });
+    expect(titlesBySection(readingList).want_to_read).toEqual(["Dom Casmurro"]);
+
+    expect(
+      readingList.edit(book.id, {
+        title: "\t Dom Casmurro \n",
+        authorship: "  Machado de Assis ",
+      }),
+    ).toMatchObject({
+      ok: true,
+      value: { title: "Dom Casmurro", authorship: "Machado de Assis" },
+    });
+  });
+
+  test("editing a Livro that does not exist is refused with 'Livro não encontrado.'", () => {
+    const { readingList } = inMemoryReadingList();
+
+    expect(
+      readingList.edit(42, { title: "Dom Casmurro", authorship: "Machado" }),
+    ).toEqual({
+      ok: false,
+      error: { kind: "not-found", message: "Livro não encontrado." },
+    });
+  });
+
+  test("a storage failure is reported with the save message", () => {
+    const closed = new DatabaseSync(":memory:");
+    closed.close();
+    const readingList = createReadingList(
+      () => closed,
+      () => 0,
+    );
+
+    expect(
+      readingList.edit(1, { title: "Dom Casmurro", authorship: "Machado" }),
+    ).toEqual({
+      ok: false,
+      error: {
+        kind: "storage",
+        message: "Não foi possível salvar. Tente novamente.",
+      },
+    });
+  });
+});
+
 describe("persistência", () => {
   test("after a restart the same Livros are in the same sections and order", () => {
     const path = join(tempDir(), "reading-list.db");

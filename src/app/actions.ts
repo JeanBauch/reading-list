@@ -16,3 +16,13 @@ export async function registerBook(formData: FormData) {
   refresh();
   return { ok: true } as const;
 }
+
+export async function changeBookStatus(formData: FormData) {
+  const result = readingList.changeStatus(
+    formData.get("id"),
+    formData.get("status"),
+  );
+  if (!result.ok) return result;
+  refresh();
+  return { ok: true, status: result.value.status } as const;
+}

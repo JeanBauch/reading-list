@@ -26,6 +26,8 @@
       "Bash(gh pr diff *)",
       "Bash(gh pr checks *)",
       "Bash(gh pr create *)",
+      "Bash(gh run view *)",
+      "Bash(git pull --ff-only*)",
       "Bash(git status*)",
       "Bash(git diff*)",
       "Bash(git log*)",

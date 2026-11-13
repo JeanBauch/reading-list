@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// PreToolUse (Edit|Write|NotebookEdit) hook: secrets and lockfiles are never edited by hand.
+// PreToolUse (Edit|Write|NotebookEdit) hook: secrets, lockfiles and node_modules are never edited by hand.
 // Lockfiles change only through the package manager (`pnpm add/remove/install`).
 import { basename } from 'node:path'
 import { readStdinJson } from './lib.mjs'
@@ -9,7 +9,10 @@ const ENV_ALLOWED = new Set(['.env.example', '.env.sample', '.env.template'])
 const LOCKFILES = new Set(['pnpm-lock.yaml', 'package-lock.json', 'yarn.lock', 'bun.lock', 'bun.lockb', 'npm-shrinkwrap.json'])
 
 export function blockReason(filePath) {
-  const name = basename(filePath.replace(/\\/g, '/'))
+  const normalized = filePath.replace(/\\/g, '/')
+  if (/(^|\/)node_modules\//.test(normalized))
+    return 'installed packages are shared with the global pnpm store; if a package looks corrupted, stop and tell the user instead of patching it'
+  const name = basename(normalized)
   if (ENV_FILE.test(name) && !ENV_ALLOWED.has(name)) return `${name} may hold secrets; edit .env.example and ask the user to update their env file`
   if (LOCKFILES.has(name)) return `${name} is generated; change dependencies with the package manager instead`
   return null

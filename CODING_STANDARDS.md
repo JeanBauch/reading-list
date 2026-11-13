@@ -1,6 +1,6 @@
 # Coding standards: reading-list
 
-Read during review, not during implementation. Only judgement calls belong here: anything mechanical
+Read by the implementer before coding and by reviewers after. Only judgement calls belong here: anything mechanical
 (formatting, import order, banned APIs) belongs in lint, typecheck or a hook. Where this file and the
 reviewer's code-smell baseline disagree, this file wins.
 

@@ -16,11 +16,12 @@ Claude Code reads this file instead of AGENTS.md, so the Next.js agent rules are
 ## Workflow rules
 
 - Specs and tickets live in GitHub Issues (labels `type:spec`, `type:ticket`); see `docs/agents/issue-tracker.md`. Never put file paths or code in them.
-- One branch per spec: `feat/<spec#>-<slug>`. One commit per ticket: `feat(#<ticket>): <summary>`.
+- A spec gets `ready-for-agent` only after the gap review (F3) closes with no open questions; publish it with `needs-triage` until then.
+- One ticket, one branch, one PR: `feat/<ticket#>-<slug>` from `main`, commits `feat(#<ticket>)` / `fix(#<ticket>)`. `/ship-ticket` runs the whole cycle; tickets labelled `model:opus` are implemented with Opus.
 - Never push to `main`, never merge PRs, never edit `.env*` or lockfiles. The human merges.
 - A choice the spec and ADRs don't settle: hard to reverse → comment `NEEDS-DECISION: ...` on the ticket and stop; easy to reverse → pick the simplest option and comment `ASSUMPTION: ...`.
 - "Done" means evidence: the exact command you ran and its output.
-- Review with `/mattpocock-skills:code-review` (Standards and Spec axes) as well as the built-in `/code-review`.
+- Review with the built-in `/code-review` and `/mattpocock-skills:code-review` (Standards and Spec axes); every finding gets a verdict: fix, accept or reject.
 - Language: issues, PRs, ADRs and `GLOSSARY.md` in Brazilian Portuguese; code, identifiers and commit messages in English.
 
 ## Gotchas

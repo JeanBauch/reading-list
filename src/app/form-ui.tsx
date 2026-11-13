@@ -13,7 +13,7 @@ export const DANGER_BUTTON_CLASS = `self-start rounded bg-red-700 px-3 py-1 text
 
 /** For elements that receive focus from the app (section headings, Livros), not by Tab. */
 export const FOCUS_TARGET_CLASS =
-  "focus:outline-2 focus:outline-offset-4 focus:outline-blue-600";
+  "focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-blue-600";
 
 /** Links a field to its error message so screen readers announce them together. */
 export function errorProps(id: string, error: string | undefined) {

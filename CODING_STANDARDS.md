@@ -20,6 +20,8 @@ reviewer's code-smell baseline disagree, this file wins.
 
 - No silent `catch`: handle the error, or let it propagate with context.
 - Empty, loading and error states are explicit in the UI, not console output.
+- Every client-side Server Action call handles a rejected promise (network drop, server restart) with an in-UI message. "The spec doesn't cover it" is not a reason to skip this.
+- A multi-statement transaction rolls back on failure; a shared connection never stays inside an open transaction.
 
 ## Tests
 

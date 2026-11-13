@@ -1,0 +1,6 @@
+# Store and check out text files with LF on every OS (Prettier and Linux CI expect LF).
+* text=auto eol=lf
+*.png binary
+*.jpg binary
+*.ico binary
+*.woff2 binary

@@ -47,6 +47,11 @@ export type ReadingList = {
   register(
     input: RegisterInput,
   ): Result<Book, ValidationFailure | StorageFailure>;
+  /** Only Título and Autoria change: the Situação and the section order stay as they were. */
+  edit(
+    id: unknown,
+    input: { title: unknown; authorship: unknown },
+  ): Result<Book, ValidationFailure | NotFoundFailure | StorageFailure>;
   /** Choosing the Situação the Livro already has changes nothing, not even its change moment. */
   changeStatus(
     id: unknown,
@@ -263,6 +268,25 @@ export function createReadingList(
              RETURNING ${BOOK_COLUMNS}`,
           )
           .get(status, now(), book.id) as Book;
+        return { ok: true, value: toBook(row) };
+      }, MESSAGES.saveFailed);
+    },
+
+    edit(id, input) {
+      const validated = validateFields(input);
+      if (!validated.ok) return validated;
+      const { title, authorship } = validated.fields;
+      const bookId = parseId(id);
+
+      return attempt((db) => {
+        const book = findBook(db, bookId);
+        if (!book) return NOT_FOUND;
+        const row = db
+          .prepare(
+            `UPDATE books SET title = ?, authorship = ? WHERE id = ?
+             RETURNING ${BOOK_COLUMNS}`,
+          )
+          .get(title, authorship, book.id) as Book;
         return { ok: true, value: toBook(row) };
       }, MESSAGES.saveFailed);
     },

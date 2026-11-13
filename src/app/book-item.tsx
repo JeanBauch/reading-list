@@ -130,6 +130,7 @@ function RemovalConfirmation({
         <button
           type="button"
           autoFocus
+          disabled={pending}
           onClick={onCancel}
           className={SECONDARY_BUTTON_CLASS}
         >
@@ -211,6 +212,7 @@ function EditForm({ book, onClose }: { book: Book; onClose: () => void }) {
         </button>
         <button
           type="button"
+          disabled={pending}
           onClick={onClose}
           className={SECONDARY_BUTTON_CLASS}
         >

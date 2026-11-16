@@ -1,19 +1,15 @@
 "use client";
 
 import { useRef, useTransition, type FormEvent } from "react";
+import { MESSAGES } from "../reading-list/messages";
+import type { StorageFailure } from "../reading-list/reading-list";
 
 /** What a rejected Server Action call (network drop, server restart) looks like to callers. */
-export type ConnectionFailure = {
-  ok: false;
-  error: { kind: "storage"; message: string };
-};
+export type ConnectionFailure = { ok: false; error: StorageFailure };
 
 const CONNECTION_FAILURE: ConnectionFailure = {
   ok: false,
-  error: {
-    kind: "storage",
-    message: "Não foi possível salvar. Tente novamente.",
-  },
+  error: { kind: "storage", message: MESSAGES.saveFailed },
 };
 
 /**

@@ -212,7 +212,11 @@ test("changing the selector with the keyboard without pressing Mover saves nothi
   await page.goto("/");
   const selector = page.getByLabel("Situação de Clique duplo", { exact: true });
 
+  // The list streams in hidden and is revealed a moment later; focusing it before the
+  // reveal does nothing and the keys go to the page body.
+  await expect(selector).toBeVisible();
   await selector.focus();
+  await expect(selector).toBeFocused();
   await page.keyboard.press("ArrowDown");
   await page.keyboard.press("ArrowDown");
   await expect(selector).not.toHaveValue("want_to_read");

@@ -453,11 +453,17 @@ test("a lost connection while registering shows the message, keeps what was type
   await page.goto("/");
   await form(page).getByLabel("Título", { exact: true }).fill("Sem conexão");
   await form(page).getByLabel("Autoria", { exact: true }).fill("Autoria");
+  await form(page)
+    .getByLabel("Situação", { exact: true })
+    .selectOption({ label: "Lendo" });
 
   await dropConnection(page);
   await page.getByRole("button", { name: "Cadastrar" }).click();
 
   await expect(form(page).getByRole("alert")).toHaveText(CONNECTION_MESSAGE);
+  await expect(form(page).getByLabel("Situação", { exact: true })).toHaveValue(
+    "reading",
+  );
   await expect(form(page).getByLabel("Título", { exact: true })).toHaveValue(
     "Sem conexão",
   );
@@ -468,6 +474,9 @@ test("a lost connection while registering shows the message, keeps what was type
   await expectNoFrameworkErrorScreen(page);
 
   await restoreConnection(page);
+  await form(page)
+    .getByLabel("Situação", { exact: true })
+    .selectOption({ label: "Quero ler" });
   await page.getByRole("button", { name: "Cadastrar" }).click();
   await expect(section(page, "Fila")).toContainText("Sem conexão");
 });
@@ -491,6 +500,9 @@ test("a lost connection while moving a Livro shows the message and restores the 
   ).toBeEnabled();
   await expectNoFrameworkErrorScreen(page);
   await restoreConnection(page);
+  await page.reload();
+  await expect(book(page, "Fila", "Sem conexão")).toBeVisible();
+  await expect(selector).toHaveValue("want_to_read");
 });
 
 test("a lost connection while editing shows the message and keeps what was typed", async ({
@@ -513,6 +525,9 @@ test("a lost connection while editing shows the message and keeps what was typed
   await expect(editForm.getByRole("button", { name: "Salvar" })).toBeEnabled();
   await expectNoFrameworkErrorScreen(page);
   await restoreConnection(page);
+  await page.reload();
+  await expect(section(page, "Fila")).toContainText("Sem conexão");
+  await expect(page.getByText("Título novo")).toHaveCount(0);
 });
 
 test("a lost connection while removing shows the message and keeps the Livro", async ({

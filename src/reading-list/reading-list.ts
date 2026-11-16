@@ -1,8 +1,10 @@
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import { DatabaseSync } from "node:sqlite";
+import { MESSAGES } from "./messages";
 import { STATUSES, type Status } from "./status";
 
+export { MESSAGES } from "./messages";
 export { STATUSES, type Status } from "./status";
 
 /**
@@ -58,17 +60,6 @@ export type ReadingList = {
 
 /** Milliseconds since the epoch. Production uses the system clock; tests control it. */
 export type Clock = () => number;
-
-export const MESSAGES = {
-  loadFailed: "Não foi possível carregar a lista de leitura.",
-  saveFailed: "Não foi possível salvar. Tente novamente.",
-  titleRequired: "Informe o título.",
-  titleTooLong: "O título deve ter no máximo 200 caracteres.",
-  authorshipRequired: "Informe a autoria.",
-  authorshipTooLong: "A autoria deve ter no máximo 200 caracteres.",
-  invalidStatus: "Situação inválida.",
-  notFound: "Livro não encontrado.",
-} as const;
 
 const MAX_TEXT_LENGTH = 200;
 

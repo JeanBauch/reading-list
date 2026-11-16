@@ -423,3 +423,114 @@ test("acting on a Livro removed in another tab shows 'Livro não encontrado.' ne
     page.getByLabel("Situação de Iracema", { exact: true }),
   ).toHaveValue("read");
 });
+
+const CONNECTION_MESSAGE = "Não foi possível salvar. Tente novamente.";
+
+/** Makes every Server Action request fail the way a dropped connection does. */
+async function dropConnection(page: Page) {
+  await page.route("**/*", (route) => {
+    if (route.request().headers()["next-action"]) return route.abort();
+    return route.continue();
+  });
+}
+
+async function restoreConnection(page: Page) {
+  await page.unroute("**/*");
+}
+
+function expectNoFrameworkErrorScreen(page: Page) {
+  return Promise.all([
+    expect(
+      page.getByRole("heading", { level: 1, name: "Lista de leitura" }),
+    ).toBeVisible(),
+    expect(page.getByText("Application error")).toHaveCount(0),
+  ]);
+}
+
+test("a lost connection while registering shows the message, keeps what was typed and allows trying again", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await form(page).getByLabel("Título", { exact: true }).fill("Sem conexão");
+  await form(page).getByLabel("Autoria", { exact: true }).fill("Autoria");
+
+  await dropConnection(page);
+  await page.getByRole("button", { name: "Cadastrar" }).click();
+
+  await expect(form(page).getByRole("alert")).toHaveText(CONNECTION_MESSAGE);
+  await expect(form(page).getByLabel("Título", { exact: true })).toHaveValue(
+    "Sem conexão",
+  );
+  await expect(form(page).getByLabel("Autoria", { exact: true })).toHaveValue(
+    "Autoria",
+  );
+  await expect(page.getByRole("button", { name: "Cadastrar" })).toBeEnabled();
+  await expectNoFrameworkErrorScreen(page);
+
+  await restoreConnection(page);
+  await page.getByRole("button", { name: "Cadastrar" }).click();
+  await expect(section(page, "Fila")).toContainText("Sem conexão");
+});
+
+test("a lost connection while moving a Livro shows the message and restores the selector", async ({
+  page,
+}) => {
+  await page.goto("/");
+  const selector = page.getByLabel("Situação de Sem conexão", { exact: true });
+
+  await dropConnection(page);
+  await selector.selectOption({ label: "Lido" });
+  await page.getByRole("button", { name: "Mover Sem conexão" }).click();
+
+  await expect(book(page, "Fila", "Sem conexão").getByRole("alert")).toHaveText(
+    CONNECTION_MESSAGE,
+  );
+  await expect(selector).toHaveValue("want_to_read");
+  await expect(
+    page.getByRole("button", { name: "Mover Sem conexão" }),
+  ).toBeEnabled();
+  await expectNoFrameworkErrorScreen(page);
+  await restoreConnection(page);
+});
+
+test("a lost connection while editing shows the message and keeps what was typed", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await page
+    .getByRole("button", { name: "Editar Sem conexão", exact: true })
+    .click();
+  const editForm = page.getByRole("form", { name: "Editar Sem conexão" });
+  await editForm.getByLabel("Título", { exact: true }).fill("Título novo");
+
+  await dropConnection(page);
+  await editForm.getByRole("button", { name: "Salvar" }).click();
+
+  await expect(editForm.getByRole("alert")).toHaveText(CONNECTION_MESSAGE);
+  await expect(editForm.getByLabel("Título", { exact: true })).toHaveValue(
+    "Título novo",
+  );
+  await expect(editForm.getByRole("button", { name: "Salvar" })).toBeEnabled();
+  await expectNoFrameworkErrorScreen(page);
+  await restoreConnection(page);
+});
+
+test("a lost connection while removing shows the message and keeps the Livro", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await page.getByRole("button", { name: "Excluir Sem conexão" }).click();
+  const item = book(page, "Fila", "Sem conexão");
+
+  await dropConnection(page);
+  await item.getByRole("button", { name: "Confirmar exclusão" }).click();
+
+  await expect(item.getByRole("alert")).toHaveText(CONNECTION_MESSAGE);
+  await expect(
+    item.getByRole("button", { name: "Confirmar exclusão" }),
+  ).toBeEnabled();
+  await expectNoFrameworkErrorScreen(page);
+  await restoreConnection(page);
+  await page.reload();
+  await expect(section(page, "Fila")).toContainText("Sem conexão");
+});

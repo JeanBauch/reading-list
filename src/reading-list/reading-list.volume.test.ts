@@ -1,29 +1,35 @@
 // @vitest-environment node
 import { describe, expect, test } from "vitest";
-import { inMemoryReadingList, titlesBySection } from "./test-support";
+import type { ReadingList } from "./reading-list";
+import {
+  inMemoryReadingList,
+  queryCountingReadingList,
+  titlesBySection,
+} from "./test-support";
 
 /**
  * Requirement "with 1.000 Livros the page loads and registering shows no noticeable delay".
  *
- * Each timing is the fastest of SAMPLES runs after one warm-up run, so a GC pause or a busy CI
- * worker only slows some samples, not the one that counts. Measured on a development machine
- * (in-memory SQLite, fastest sample):
+ * Two layers:
  *
- * - reading the sections: about 0.7 ms. A per-Livro query that prepares a statement for each
- *   Livro costs about 4.8 ms, so the 3 ms read limit catches it with about 4x headroom over
- *   today. It does NOT catch a per-Livro query reusing one prepared statement (about 1.3 ms) or
- *   sorting in JavaScript instead of SQL (about 0.6 ms, no slower than today): both are too
- *   close to today's cost for a limit that must not flake on CI. Order regressions are caught
- *   by the order test below instead.
- * - registering one Livro on a full list: about 0.04 ms. A registration that also reads the
- *   whole list back costs about 0.36 ms with one query and about 0.8 ms through the sections,
- *   so the 0.2 ms register limit catches both with about 5x headroom over today. A smaller
- *   extra cost per registration (well under 0.2 ms) goes unnoticed.
+ * 1. The requirement itself, in time. "No noticeable delay" is read as: the sections are read in
+ *    under 50 ms and one Livro is registered in under 20 ms, both with 1.000 Livros. Each timing
+ *    is the fastest of SAMPLES runs after one warm-up run, so a GC pause or a busy CI worker only
+ *    slows some samples. Measured on a development machine (in-memory SQLite, fastest sample):
+ *    reading about 0.7 ms, registering about 0.04 ms, so both limits leave a margin of hundreds
+ *    of times and do not flake on a slow runner. They only catch a gross slowdown.
+ * 2. Regressions, without timing. Counting the queries each call runs catches the slowdowns that
+ *    are too small to time reliably (a per-Livro query costs about 1.3 to 4.8 ms, a re-read of
+ *    the list on register about 0.36 to 0.8 ms): reading the sections runs as many queries with
+ *    1.000 Livros as with 10, so a query per Livro fails it whether it prepares a statement each
+ *    time or reuses one; registering reads back as many rows with 1.000 Livros as with 10, so a
+ *    re-read of the list fails it. Sorting outside SQL is caught by the order test instead.
  */
-const READ_LIMIT_MS = 3;
-const REGISTER_LIMIT_MS = 0.2;
+const READ_LIMIT_MS = 50;
+const REGISTER_LIMIT_MS = 20;
 const SAMPLES = 10;
 const BOOK_COUNT = 1_000;
+const SMALL_BOOK_COUNT = 10;
 
 /** The Situações the setup cycles through, Livro 0 first: Livro n gets SITUATION_CYCLE[n % 4]. */
 const SITUATION_CYCLE = [
@@ -34,10 +40,13 @@ const SITUATION_CYCLE = [
 ] as const;
 const BOOKS_PER_SITUATION = BOOK_COUNT / SITUATION_CYCLE.length;
 
-function fullReadingList() {
-  const { readingList, clock } = inMemoryReadingList();
+/** Registers `count` Livros, cycling the Situações, one clock tick apart. */
+function fill(
+  { readingList, clock }: { readingList: ReadingList; clock: { now: number } },
+  count: number,
+) {
   const ids: number[] = [];
-  for (let index = 0; index < BOOK_COUNT; index++) {
+  for (let index = 0; index < count; index++) {
     clock.now += 1;
     const registered = readingList.register({
       title: `Livro ${index}`,
@@ -47,7 +56,34 @@ function fullReadingList() {
     if (!registered.ok) throw new Error(JSON.stringify(registered.error));
     ids.push(registered.value.id);
   }
-  return { readingList, clock, ids };
+  return ids;
+}
+
+function fullReadingList() {
+  const list = inMemoryReadingList();
+  return { ...list, ids: fill(list, BOOK_COUNT) };
+}
+
+/** A query-counting reading list holding `count` Livros. */
+function countedReadingList(count: number) {
+  const list = queryCountingReadingList();
+  fill(list, count);
+  return list;
+}
+
+function registerOneMore({
+  readingList,
+  clock,
+}: {
+  readingList: ReadingList;
+  clock: { now: number };
+}) {
+  clock.now += 1;
+  return readingList.register({
+    title: "Mais um",
+    authorship: "Autoria",
+    status: "want_to_read",
+  });
 }
 
 /** Runs the work once to warm up, then returns the fastest of SAMPLES timed runs. */
@@ -76,22 +112,39 @@ describe("with 1.000 Livros", () => {
   });
 
   test("registering one more Livro stays under the register limit", () => {
-    const { readingList, clock } = fullReadingList();
+    const list = fullReadingList();
     const results: unknown[] = [];
 
     const elapsed = fastestMs(() => {
-      clock.now += 1;
-      results.push(
-        readingList.register({
-          title: "Mais um",
-          authorship: "Autoria",
-          status: "want_to_read",
-        }),
-      );
+      results.push(registerOneMore(list));
     });
 
     for (const result of results) expect(result).toMatchObject({ ok: true });
     expect(elapsed).toBeLessThan(REGISTER_LIMIT_MS);
+  });
+
+  test("getting the sections runs as many queries as with 10 Livros (no query per Livro)", () => {
+    const small = countedReadingList(SMALL_BOOK_COUNT);
+    const full = countedReadingList(BOOK_COUNT);
+
+    const smallCount = small.queriesDuring(() =>
+      small.readingList.getSections(),
+    );
+    const fullCount = full.queriesDuring(() => full.readingList.getSections());
+
+    // The counter sees the reads: every Livro comes back exactly once.
+    expect(fullCount.rows).toBe(BOOK_COUNT);
+    expect(fullCount.queries).toBe(smallCount.queries);
+  });
+
+  test("registering one more Livro does the same database work as with 10 Livros (no re-read of the list)", () => {
+    const small = countedReadingList(SMALL_BOOK_COUNT);
+    const full = countedReadingList(BOOK_COUNT);
+
+    const smallCount = small.queriesDuring(() => registerOneMore(small));
+    const fullCount = full.queriesDuring(() => registerOneMore(full));
+
+    expect(fullCount).toEqual(smallCount);
   });
 
   test("the sections keep their order: Fila oldest first, the others latest change first", () => {
